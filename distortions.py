@@ -4,11 +4,12 @@ import pandas as pd
 import os
 
 def load_grid_data_D(ffolder, encoding='latin1'):
-    """
+    """Load the txt files of the measured and corresponding reference positions. Saves them into a pandas.DataFrame.
+    
     Parameters
     ----------
     ffolder : string
-        Location of txt files with measured and reference positions..
+        Location of txt files with measured and reference positions.
     encoding : string
         File encoding, defaults to ``latin1``.
     Returns
@@ -35,7 +36,7 @@ def load_grid_data_D(ffolder, encoding='latin1'):
     return cats
 
 def distortions_of_image(cats, platescale=None, scale=1):
-    r"""Get distortions and normalized positions of the image.
+    """Get distortions and normalized positions of the image.
     By default, an affine transform is used for the transformation
     from reference coordinates to measured coordinates. The affine transform is the
     least-squares solution for each catalog.
@@ -43,6 +44,7 @@ def distortions_of_image(cats, platescale=None, scale=1):
     a fixed scale is used.
     Normalized positions are calculated by shifting and scaling the
     positions into the domain :math:`[-1, 1]`.
+    
     Parameters
     ----------
     cats : list of pandas.DataFrame
