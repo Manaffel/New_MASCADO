@@ -77,7 +77,8 @@ def data_correction(images,fdarkff,fdark,fff):
     
     return images
    
-def find_pinholes(fname,freference,sname,fdarkff,fdark,fff,files,size,threshold,fwhm,fitshape,sigma=2.,oversampling=4,maxiters=3):
+def find_pinholes(fname,freference,sname,fdarkff,fdark,fff,files,size,threshold,fwhm,fitshape,MAX_CONTROL_POINTS,
+                  PIXEL_TOL,sigma=2.,oversampling=4,maxiters=3,MIN_MATCHES_FRACTION=0.8):
     """Finds and fits pinhole positions with a ePSF in a FITS image. Then matches them to the reference positions.
     
     Parameters
@@ -104,8 +105,13 @@ def find_pinholes(fname,freference,sname,fdarkff,fdark,fff,files,size,threshold,
         The full-width half-maximum (FWHM) of the major axis of the Gaussian kernel in units of pixels.
     fitshape : int or length-2 array-like
         Rectangular shape around the center of a star which will be used to collect the data to do the fitting. 
-        Can be an integer to be the same along both axes. E.g., 5 is the same as (5, 5), which means to fit only at the following 
+        Can be an integer to be the same along both axes. 
+        E.g., 5 is the same as (5, 5), which means to fit only at the following 
         relative pixel positions: [-2, -1, 0, 1, 2]. Each element of fitshape must be an odd number.
+    MAX_CONTROL_POINTS : int
+        The maximum control points (stars) to use to build the invariants.    
+    PIXEL_TOL : int
+        The pixel distance tolerance to assume two invariant points are the same.
     sigma : float
         Number of standard deviations used to perform sigma clip with a astropy.stats.SigmaClip object.
     oversampling : int or tuple of two int
@@ -114,6 +120,11 @@ def find_pinholes(fname,freference,sname,fdarkff,fdark,fff,files,size,threshold,
         If oversampling is a scalar then the oversampling will be the same for both the x and y axes.
     maxiters : int
         The maximum number of iterations to perform.
+    MIN_MATCHES_FRACTION : float (0,1]
+        The minimum fraction of triangle matches to accept a transformation.
+        If the minimum fraction yields more than 10 triangles, 10 is used instead.
+    NUM_NEAREST_NEIGHBORS : int
+        The number of nearest neighbors of a given star (including itself) to construct the triangle invariants.
     Returns
     -------
     s_list : (N,2)-shaped array
@@ -130,7 +141,7 @@ def find_pinholes(fname,freference,sname,fdarkff,fdark,fff,files,size,threshold,
         data_col = np.append(data_col,[fits.getdata(fname+'/'+entries[k], ext=0)],axis=0)
         
     #Data reduction: Darc current + Flatfield
-    data_col = data_correction(images,fdarkff,fdark,fff)
+    data_col = data_correction(data_col,fdarkff,fdark,fff)
         
     #Claculate median image
     data_full = np.median(data_col,axis=0)
@@ -192,8 +203,8 @@ def find_pinholes(fname,freference,sname,fdarkff,fdark,fff,files,size,threshold,
     ax.set(xlabel='x [pixel]', ylabel='y [pixel]')
     ax.imshow(data_full, cmap='Greys', origin='lower', norm=norm)
     apertures.plot(color='blue', lw=1.5, alpha=0.5)
-    ax.legend(['#pinholes = '+str(len(pos_full[:,0]))]
-                   ,loc='lower left',prop={'size': 12})
+    ax.legend(['#pinholes = '+str(len(pos_full[:,0]))],
+              loc='lower left',prop={'size': 12})
     plt.show()
     
     #Sort positions by matching with reference grid
@@ -201,7 +212,7 @@ def find_pinholes(fname,freference,sname,fdarkff,fdark,fff,files,size,threshold,
     
     ref_positions = np.genfromtxt(freference,skip_header=0)
     
-    transf, (s_list, t_list) = find_transform(positions_sort, ref_positions)
+    transf, (s_list, t_list) = find_transform(positions_sort,ref_positions,MAX_CONTROL_POINTS,PIXEL_TOL,MIN_MATCHES_FRACTION,NUM_NEAREST_NEIGHBORS)
     
     text = np.array([s_list[:,0],s_list[:,1],t_list[:,0],t_list[:,1]])
     text_trans = np.zeros((len(s_list[:,0]),4))
@@ -216,36 +227,14 @@ def find_pinholes(fname,freference,sname,fdarkff,fdark,fff,files,size,threshold,
                header='x-measured   y-measured   x-reference   y-reference')
     
     return s_list, t_list
-    
-MAX_CONTROL_POINTS = 2000
-"""The maximum control points (stars) to use to build the invariants.
-Default: 2000"""
-
-PIXEL_TOL = 10
-"""The pixel distance tolerance to assume two invariant points are the same.
-Default: 10"""
-
-MIN_MATCHES_FRACTION = 0.8
-"""The minimum fraction of triangle matches to accept a transformation.
-If the minimum fraction yields more than 10 triangles, 10 is used instead.
-Default: 0.8
-"""
-
-NUM_NEAREST_NEIGHBORS = 5
-"""
-The number of nearest neighbors of a given star (including itself) to construct
-the triangle invariants.
-Default: 5
-"""
-
 
 def _invariantfeatures(x1, x2, x3):
     "Given 3 points x1, x2, x3, return the invariant features for the set."
-    sides = _np.sort(
+    sides = np.sort(
         [
-            _np.linalg.norm(x1 - x2),
-            _np.linalg.norm(x2 - x3),
-            _np.linalg.norm(x1 - x3),
+            np.linalg.norm(x1 - x2),
+            np.linalg.norm(x2 - x3),
+            np.linalg.norm(x1 - x3),
         ]
     )
     return [sides[2] / sides[1], sides[1] / sides[0]]
@@ -260,9 +249,9 @@ and L1 < L2 < L3 are the sides of the triangle defined by vertex_indices."""
     ind1, ind2, ind3 = vertex_indices
     x1, x2, x3 = sources[vertex_indices]
 
-    side_ind = _np.array([(ind1, ind2), (ind2, ind3), (ind3, ind1)])
-    side_lengths = list(map(_np.linalg.norm, (x1 - x2, x2 - x3, x3 - x1)))
-    l1_ind, l2_ind, l3_ind = _np.argsort(side_lengths)
+    side_ind = np.array([(ind1, ind2), (ind2, ind3), (ind3, ind1)])
+    side_lengths = list(map(np.linalg.norm, (x1 - x2, x2 - x3, x3 - x1)))
+    l1_ind, l2_ind, l3_ind = np.argsort(side_lengths)
 
     # the most common vertex in the list of vertices for two sides is the
     # point at which they meet.
@@ -275,10 +264,10 @@ and L1 < L2 < L3 are the sides of the triangle defined by vertex_indices."""
     count = Counter(side_ind[[l3_ind, l1_ind]].flatten())
     c = count.most_common(1)[0][0]
 
-    return _np.array([a, b, c])
+    return np.array([a, b, c])
 
 
-def _generate_invariants(sources):
+def _generate_invariants(sources, NUM_NEAREST_NEIGHBORS):
     """Return an array of (unique) invariants derived from the array `sources`.
 Return an array of the indices of `sources` that correspond to each invariant,
 arranged as described in _arrangetriplet.
@@ -315,8 +304,8 @@ arranged as described in _arrangetriplet.
     uniq_ind = [
         pos for (pos, elem) in enumerate(inv) if elem not in inv[pos + 1 :]
     ]
-    inv_uniq = _np.array(inv)[uniq_ind]
-    triang_vrtx_uniq = _np.array(triang_vrtx)[uniq_ind]
+    inv_uniq = np.array(inv)[uniq_ind]
+    triang_vrtx_uniq = np.array(triang_vrtx)[uniq_ind]
 
     return inv_uniq, triang_vrtx_uniq
 
@@ -351,7 +340,7 @@ class _MatchTransform:
         return error
 
 
-def find_transform(source, target):
+def find_transform(source, target,MAX_CONTROL_POINTS,PIXEL_TOL,MIN_MATCHES_FRACTION,NUM_NEAREST_NEIGHBORS):
     """Estimate the transform between ``source`` and ``target``.
     Return a SimilarityTransform object ``T`` that maps pixel x, y indices from
     the source image s = (x, y) into the target (destination) image t = (x, y).
@@ -364,6 +353,15 @@ def find_transform(source, target):
         target (array-like): Either a numpy array of the target (destination)
             image or an interable of (x, y) coordinates of the target
             control points.
+        MAX_CONTROL_POINTS : int
+            The maximum control points (stars) to use to build the invariants.    
+        PIXEL_TOL : int
+            The pixel distance tolerance to assume two invariant points are the same.
+        MIN_MATCHES_FRACTION : float (0,1]
+            The minimum fraction of triangle matches to accept a transformation.
+            If the minimum fraction yields more than 10 triangles, 10 is used instead.
+        NUM_NEAREST_NEIGHBORS : int
+            The number of nearest neighbors of a given star (including itself) to construct the triangle invariants.
     Returns:
         The transformation object and a tuple of corresponding star positions
         in source and target.::
@@ -377,7 +375,7 @@ def find_transform(source, target):
     try:
         if len(source[0]) == 2:
             # Assume it's a list of (x, y) pairs
-            source_controlp = _np.array(source)[:MAX_CONTROL_POINTS]
+            source_controlp = np.array(source)[:MAX_CONTROL_POINTS]
         else:
             # Assume it's a 2D image
             source_controlp = _find_sources(source)[:MAX_CONTROL_POINTS]
@@ -387,7 +385,7 @@ def find_transform(source, target):
     try:
         if len(target[0]) == 2:
             # Assume it's a list of (x, y) pairs
-            target_controlp = _np.array(target)[:MAX_CONTROL_POINTS]
+            target_controlp = np.array(target)[:MAX_CONTROL_POINTS]
         else:
             # Assume it's a 2D image
             target_controlp = _find_sources(target)[:MAX_CONTROL_POINTS]
@@ -406,10 +404,10 @@ def find_transform(source, target):
             "minimum value (3)."
         )
 
-    source_invariants, source_asterisms = _generate_invariants(source_controlp)
+    source_invariants, source_asterisms = _generate_invariants(source_controlp,NUM_NEAREST_NEIGHBORS)
     source_invariant_tree = KDTree(source_invariants)
 
-    target_invariants, target_asterisms = _generate_invariants(target_controlp)
+    target_invariants, target_asterisms = _generate_invariants(target_controlp,NUM_NEAREST_NEIGHBORS)
     target_invariant_tree = KDTree(target_invariants)
 
     # r = 0.1 is the maximum search distance, 0.1 is an empirical value that
@@ -431,7 +429,7 @@ def find_transform(source, target):
     for t1, t2_list in zip(source_asterisms, matches_list):
         for t2 in target_asterisms[t2_list]:
             matches.append(list(zip(t1, t2)))
-    matches = _np.array(matches)
+    matches = np.array(matches)
 
     inv_model = _MatchTransform(source_controlp, target_controlp)
     n_invariants = len(matches)
@@ -442,7 +440,7 @@ def find_transform(source, target):
         matches
     ) == 1:
         best_t = inv_model.fit(matches)
-        inlier_ind = _np.arange(len(matches))  # All of the indices
+        inlier_ind = np.arange(len(matches))  # All of the indices
     else:
         best_t, inlier_ind = _ransac(
             matches, inv_model, 1, max_iter, PIXEL_TOL, min_matches
@@ -458,14 +456,14 @@ def find_transform(source, target):
         # calculate error
         s_vertex = source_controlp[s_i]
         t_vertex = target_controlp[t_i]
-        s_vertex_expanded = _np.append(s_vertex, [1]).reshape(3, 1)
+        s_vertex_expanded = np.append(s_vertex, [1]).reshape(3, 1)
         s_vertex_pred = best_t.params.dot(s_vertex_expanded)[:2].reshape(-1)
-        error = _np.linalg.norm(s_vertex_pred - t_vertex)
+        error = np.linalg.norm(s_vertex_pred - t_vertex)
 
         # if s_i not in dict, or if its error is smaller than previous error
         if s_i not in inl_dict or (error < inl_dict[s_i][1]):
             inl_dict[s_i] = (t_i, error)
-    inl_arr_unique = _np.array(
+    inl_arr_unique = np.array(
         [[s_i, t_i] for s_i, (t_i, e) in inl_dict.items()]
     )
     s, d = inl_arr_unique.T
@@ -496,11 +494,11 @@ def apply_transform(
     """
     from skimage.transform import warp
 
-    if hasattr(source, "data") and isinstance(source.data, _np.ndarray):
+    if hasattr(source, "data") and isinstance(source.data, np.ndarray):
         source_data = source.data
     else:
         source_data = source
-    if hasattr(target, "data") and isinstance(target.data, _np.ndarray):
+    if hasattr(target, "data") and isinstance(target.data, np.ndarray):
         target_data = target.data
     else:
         target_data = target
@@ -511,12 +509,12 @@ def apply_transform(
         output_shape=target_data.shape,
         order=3,
         mode="constant",
-        cval=_np.median(source_data),
+        cval=np.median(source_data),
         clip=False,
         preserve_range=True,
     )
     footprint = warp(
-        _np.zeros(source_data.shape, dtype="float32"),
+        np.zeros(source_data.shape, dtype="float32"),
         inverse_map=transform.inverse,
         output_shape=target_data.shape,
         cval=1.0,
@@ -524,7 +522,7 @@ def apply_transform(
     footprint = footprint > 0.4
 
     if hasattr(source, "mask") and propagate_mask:
-        source_mask = _np.array(source.mask)
+        source_mask = np.array(source.mask)
         if source_mask.shape == source_data.shape:
             source_mask_rot = warp(
                 source_mask.astype("float32"),
@@ -569,15 +567,15 @@ def _find_sources(img):
 
     import sep
 
-    if isinstance(img, _np.ma.MaskedArray):
-        image = img.filled(fill_value=_np.median(img)).astype("float32")
+    if isinstance(img, np.ma.MaskedArray):
+        image = img.filled(fill_value=np.median(img)).astype("float32")
     else:
         image = img.astype("float32")
     bkg = sep.Background(image)
     thresh = 3.0 * bkg.globalrms
     sources = sep.extract(image - bkg.back(), thresh)
     sources.sort(order="flux")
-    return _np.array([[asrc["x"], asrc["y"]] for asrc in sources[::-1]])
+    return np.array([[asrc["x"], asrc["y"]] for asrc in sources[::-1]])
 
 class MaxIterError(RuntimeError):
     pass
@@ -604,11 +602,11 @@ Return:
     best_inlier_idxs = None
     n_data = data.shape[0]
     n = min_data_points
-    all_idxs = _np.arange(n_data)
+    all_idxs = np.arange(n_data)
 
     while iterations < max_iter:
         # Partition indices into two random subsets
-        _np.random.shuffle(all_idxs)
+        np.random.shuffle(all_idxs)
         maybe_idxs, test_idxs = all_idxs[:n], all_idxs[n:]
         maybeinliers = data[maybe_idxs, :]
         test_points = data[test_idxs, :]
@@ -618,9 +616,9 @@ Return:
         also_idxs = test_idxs[test_err < thresh]
         alsoinliers = data[also_idxs, :]
         if len(alsoinliers) >= min_matches:
-            betterdata = _np.concatenate((maybeinliers, alsoinliers))
+            betterdata = np.concatenate((maybeinliers, alsoinliers))
             bestfit = model.fit(betterdata)
-            best_inlier_idxs = _np.concatenate((maybe_idxs, also_idxs))
+            best_inlier_idxs = np.concatenate((maybe_idxs, also_idxs))
             break
         iterations += 1
     if bestfit is None:
