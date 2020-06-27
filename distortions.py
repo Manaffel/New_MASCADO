@@ -1,7 +1,8 @@
-import mascado.utility.affine as affine
 import numpy as np
 import pandas as pd
 import os
+
+import mascado.utility.affine as affine
 
 def load_grid_data_D(ffolder, encoding='latin1'):
     """Load the txt files of the measured and corresponding reference positions. Saves them into a pandas.DataFrame.
