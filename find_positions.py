@@ -78,7 +78,7 @@ def data_correction(images,fdarkff,fdark,fff):
     return images
 
 def sort_positions_regular(positions,posbase,ref_shape):
-    """Sorts the found stars of a regular rectangular pattern in the same way as the reference
+    """Sorts the found pinholes of a regular rectangular pattern.
     
     Parameters
     ----------
@@ -158,7 +158,7 @@ def sort_positions_regular(positions,posbase,ref_shape):
     return positions, ref_positions
 
 def find_pinholes_regular(fname,sname,fdarkff,fdark,fff,files,ref_shape,size,threshold,fwhm,fitshape,sigma=2.,oversampling=4,maxiters=3):
-    """Finds and fits regullary spread pinhole positions with a ePSF in a FITS image
+    """Finds and fits regullary spread pinhole positions with a ePSF in a FITS image.
     
     Parameters
     ----------
