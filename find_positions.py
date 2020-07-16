@@ -76,10 +76,255 @@ def data_correction(images,fdarkff,fdark,fff):
         images[k] = (images[k]-master_dark)/master_ff
     
     return images
+
+def sort_positions_regular(positions,posbase,ref_shape):
+    """Sorts the found stars of a regular rectangular pattern in the same way as the reference
+    
+    Parameters
+    ----------
+    positions : (N,2)-shaped array
+        Image star coordinate [pixel].
+    posbase : (3,2)-shaped array
+        Positions of the three marker points of the image.
+    ref_shape : (1,2)-shaped array
+        Number of reference stars in x and y direction (x x y).
+        
+    Returns
+    -------
+    positions_new_sort : (N, 2)-shaped array
+        Sorted Positions of the stars.
+        
+    Raises
+    ------
+    """
+    
+    realpos = np.array([[0,0]])
+    for i in range(0,ref_shape[0]):
+        for j in range(0,ref_shape[1]):
+            realpos = np.append(realpos,[[i,j]],axis=0)
+    realpos = realpos[1:]
+    
+    realposbase = np.array([[0,0],
+                   [ref_shape[0]-1,0],
+                   [0,ref_shape[1]-1]])   
+    
+    #Count found points, calculate squareroot
+    points = np.shape(positions)[0]
+    
+    #Marker points of the real positions. Used as a new basetransformation
+    realbase1 = realposbase[1] - realposbase[0]
+    realbase2 = realposbase[2] - realposbase[0]
+    
+    #Calculate basetransformation matrix for real points
+    realbasematrix = np.linalg.inv(np.array([[realbase1[0],realbase2[0]],
+                                                 [realbase1[1],realbase2[1]]]))
+    
+    #Use marker points of found position for basetransformation   
+    posbase1 = posbase[1] - posbase[0]
+    posbase2 = posbase[2] - posbase[0]
+      
+    #Calculate basetransformation matrix for found points    
+    posbasematrix = np.linalg.inv(np.array([[posbase1[0],posbase2[0]],
+                                                [posbase1[1],posbase2[1]]]))
+    #Set new matrix for transformation     
+    positions_new = np.zeros((points,2))
+    realpos_new = np.zeros((1225,2))
+    
+    #Calculate basetransformation
+    for i in range(0,1225):
+        if i < points:
+            pos_new = posbasematrix @ (positions[i] - posbase[0])
+            positions_new[i] = pos_new 
+        rpos_new = realbasematrix @ (realpos[i] - realposbase[0])
+        realpos_new[i] = rpos_new 
+    
+    #Set matrix for new sorted positions
+    ref_positions = np.zeros((points,2))
+    
+    #Index for position matrix 
+    index = np.arange(0,1225,1)
+    
+    #Sort position matrix by comparing it to realposition matrix
+    for k in range(0,points):
+        dif = np.array([])
+        index_list = np.array([])
+        for j in index:
+            dif = np.append(dif,(realpos_new[j][0]-positions_new[k][0])**2+(realpos_new[j][1]-positions_new[k][1])**2)
+            index_list = np.append(index_list,j)
+        jmin = int(index_list[dif == np.min(dif)][0])
+        index = index[index != jmin]
+        ref_positions[k] = realpos[jmin]
+                
+    return positions, ref_positions
+
+def find_pinholes_regular(fname,sname,fdarkff,fdark,fff,files,ref_shape,size,threshold,fwhm,fitshape,sigma=2.,oversampling=4,maxiters=3):
+    """Finds and fits regullary spread pinhole positions with a ePSF in a FITS image
+    
+    Parameters
+    ----------
+    fname : str
+        Folder name of the input fits files.
+    sname : str
+        Folder name of the returned found and matched pinhole positions (txt files) 
+    fdarkff : string
+        Location of the dark images for the flat field images.
+    fdark : string
+        Location of the dark images for the raw images.
+    fff : string
+        Location of the flat field images.
+    files : (1, 2)-shaped int array
+        File range to create a median image
+    ref_shape : (1,2)-shaped array
+        Number of reference stars in x and y direction (x x y).
+    size : int
+        Rectangular size of the ePSF. Size must be an odd number.
+    threshold : float
+        The absolute image value above which to select sources.
+    fwhm : float
+        The full-width half-maximum (FWHM) of the major axis of the Gaussian kernel in units of pixels.
+    fitshape : int or length-2 array-like
+        Rectangular shape around the center of a star which will be used to collect the data to do the fitting. 
+        Can be an integer to be the same along both axes. E.g., 5 is the same as (5, 5), which means to fit only at the following 
+        relative pixel positions: [-2, -1, 0, 1, 2]. Each element of fitshape must be an odd number.
+    sigma : float
+        Number of standard deviations used to perform sigma clip with a astropy.stats.SigmaClip object.
+    oversampling : int or tuple of two int
+        The oversampling factor(s) of the ePSF relative to the input stars along the x and y axes. 
+        The oversampling can either be a single float or a tuple of two floats of the form (x_oversamp, y_oversamp). 
+        If oversampling is a scalar then the oversampling will be the same for both the x and y axes.
+    maxiters : int
+        The maximum number of iterations to perform.
+    Returns
+    -------
+    positions_sort : (N,2)-shaped array
+        Found and matched positions of the pinholes.
+    ref_positions : (N,2)-shaped array
+        Matched reference grid positions.
+    """
+    
+    #Load the sample of fits images
+    entries = os.listdir(fname)
+    
+    data_col = np.array([fits.getdata(fname+'/'+entries[files[0]], ext=0)])
+    for k in range(files[0],files[1]):
+        data_col = np.append(data_col,[fits.getdata(fname+'/'+entries[k], ext=0)],axis=0)
+        
+    #Data reduction: Darc current + Flatfield + bias
+    data_col = data_correction(data_col,fdarkff,fdark,fff)        
+    
+    #Claculate median image
+    data_full = np.median(data_col,axis=0)
+    pos_full = np.array([[0,0]])
+    
+    for i in range(0,3):
+        for j in range(0,3):
+            
+            
+            data = data_full
+
+            #Find peaks in data
+            peaks_tbl = find_peaks(data, threshold=threshold) 
+            peaks_tbl['peak_value'].info.format = '%.8g'
+
+            #Load data around found peaks
+            hsize = (size - 1) / 2
+            x = peaks_tbl['x_peak']  
+            y = peaks_tbl['y_peak']  
+            mask = ((x > hsize) & (x < (data.shape[1] -1 - hsize)) &
+                    (y > hsize) & (y < (data.shape[0] -1 - hsize)))  
+
+            stars_tbl = Table()
+            stars_tbl['x'] = x[mask]  
+            stars_tbl['y'] = y[mask]  
+
+            #Calculate mean, median, std
+            mean_val, median_val, std_val = sigma_clipped_stats(data, sigma=sigma)  
+            data = data - median_val  
+
+            #Find pinholes and create ePSF
+            nddata = NDData(data=data)  
+
+            stars = extract_stars(nddata, stars_tbl, size=size) 
+
+            epsf_builder = EPSFBuilder(oversampling=oversampling, maxiters=maxiters,
+                                   progress_bar=False)  
+            epsf, fitted_stars = epsf_builder(stars)  
+            
+            #Use ePSF to find precise locations of pinholes
+            daofind = DAOPhotPSFPhotometry(crit_separation=30, threshold=threshold, fwhm=fwhm, psf_model=epsf, 
+                                           fitshape=fitshape,aperture_radius=12,niters=1)
+
+            #Get positions
+            sources = daofind(data)
+            
+            for col in sources.colnames:  
+                sources[col].info.format = '%.8g'
+
+            pos = np.transpose((sources['x_fit'], sources['y_fit']))
+            #pos[:,1] = pos[:,1] + 22+i*500
+            #pos[:,0] = pos[:,0] + 282+j*500
+            pos_full = np.append(pos_full,pos,axis=0)
+    
+    pos_full = pos_full[1:]
+    
+    #Plot found pinholes
+    apertures = CircularAperture(pos_full, r=10)
+
+    norm = ImageNormalize(stretch=SqrtStretch())
+
+    fig, ax = plt.subplots()
+    ax.set_title('Pinhole Positions')
+    ax.set(xlabel='x [pixel]', ylabel='y [pixel]')
+    ax.imshow(data_full, cmap='Greys', origin='lower', norm=norm)
+    apertures.plot(color='blue', lw=1.5, alpha=0.5)
+    ax.legend(['#pinholes = '+str(len(pos_full[:,0]))]
+                   ,loc='lower left',prop={'size': 12})
+    plt.show()
+    
+    #Find central position
+    xcent = (np.max(pos_full[:,0])+np.min(pos_full[:,0]))/2
+    ycent = (np.max(pos_full[:,1])+np.min(pos_full[:,1]))/2
+    
+    #Find positions at the edges to set base positions for linear transformatio to match pinholes with reference grid
+    distance = (pos_full[:,0]-xcent)**2+(pos_full[:,1]-ycent)**2
+    pins = len(distance)
+    sort_distance = np.partition(distance,(pins-4,pins-3,pins-2,pins-1))
+    maxpos = pos_full[distance==sort_distance[pins-1]]
+    maxpos = np.append(maxpos,pos_full[distance==sort_distance[pins-2]],axis=0)
+    maxpos = np.append(maxpos,pos_full[distance==sort_distance[pins-3]],axis=0)
+    maxpos = np.append(maxpos,pos_full[distance==sort_distance[pins-4]],axis=0)
+    
+    b01 = maxpos[maxpos[:,1] < ycent]
+    b23 = maxpos[maxpos[:,1] > ycent]
+    
+    posbase = np.array(b01[b01[:,0] < xcent])
+    
+    posbase = np.append(posbase,b01[b01[:,0] > xcent],axis=0)  
+    posbase = np.append(posbase,b23[b23[:,0] < xcent],axis=0)
+    
+    print(posbase)
+    
+    #Sort positions by matching with reference grid
+    positions_sort, ref_positions = sort_positions_regular(pos_full,posbase,ref_shape)
+    
+    text = np.array([positions_sort[:,0],positions_sort[:,1],ref_positions[:,0],ref_positions[:,1]])
+    text_trans = np.zeros((len(positions_sort[:,0]),4))
+    
+    #Transpose text matrix
+    for k in range(0,4):
+        for l in range(0,len(positions_sort[:,0])):
+            text_trans[l][k] = text[k][l]
+    
+    #Save data as txt file
+    np.savetxt(sname+'.txt',text_trans,fmt='%1.9E',delimiter='\t',
+               header=' x-measured         y-measured         x-reference          y-reference',
+               comments='')
+    
+    return positions_sort, ref_positions
    
-def find_pinholes(fname,freference,sname,fdarkff,fdark,fff,files,size,threshold,fwhm,fitshape,MAX_CONTROL_POINTS,
+def find_pinholes_random(fname,freference,sname,fdarkff,fdark,fff,files,size,threshold,fwhm,fitshape,MAX_CONTROL_POINTS,
                   PIXEL_TOL,sigma=2.,oversampling=4,maxiters=3,MIN_MATCHES_FRACTION=0.8):
-    """Finds and fits pinhole positions with a ePSF in a FITS image. Then matches them to the reference positions.
+    """Finds and fits randomly spread pinhole positions with a ePSF in a FITS image. Then matches them to the reference positions.
     
     Parameters
     ----------
