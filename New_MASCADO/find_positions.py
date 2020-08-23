@@ -261,8 +261,6 @@ def find_pinholes_regular(fname,sname,fdarkff,fdark,fff,files,ref_shape,size,thr
                 sources[col].info.format = '%.8g'
 
             pos = np.transpose((sources['x_fit'], sources['y_fit']))
-            #pos[:,1] = pos[:,1] + 22+i*500
-            #pos[:,0] = pos[:,0] + 282+j*500
             pos_full = np.append(pos_full,pos,axis=0)
     
     pos_full = pos_full[1:]
