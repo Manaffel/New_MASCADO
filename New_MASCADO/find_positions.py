@@ -128,10 +128,10 @@ def sort_positions_regular(positions,posbase,ref_shape):
                                                 [posbase1[1],posbase2[1]]]))
     #Set new matrix for transformation     
     positions_new = np.zeros((points,2))
-    realpos_new = np.zeros((1225,2))
+    realpos_new = np.zeros((ref_shape[0]*ref_shape[1],2))
     
     #Calculate basetransformation
-    for i in range(0,1225):
+    for i in range(0,ref_shape[0]*ref_shape[1]):
         if i < points:
             pos_new = posbasematrix @ (positions[i] - posbase[0])
             positions_new[i] = pos_new 
