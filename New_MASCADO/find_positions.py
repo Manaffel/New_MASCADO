@@ -214,54 +214,50 @@ def find_pinholes_regular(fname,sname,fdarkff,fdark,fff,files,ref_shape,size,thr
     
     #Claculate median image
     data_full = np.median(data_col,axis=0)
-    pos_full = np.array([[0,0]])
+    pos_full = np.array([[0,0]]) 
     
-    for i in range(0,3):
-        for j in range(0,3):
+    data = data_full
+
+    #Find peaks in data
+    peaks_tbl = find_peaks(data, threshold=threshold) 
+    peaks_tbl['peak_value'].info.format = '%.8g'
+
+    #Load data around found peaks
+    hsize = (size - 1) / 2
+    x = peaks_tbl['x_peak']  
+    y = peaks_tbl['y_peak']  
+    mask = ((x > hsize) & (x < (data.shape[1] -1 - hsize)) &
+            (y > hsize) & (y < (data.shape[0] -1 - hsize)))  
+
+    stars_tbl = Table()
+    stars_tbl['x'] = x[mask]  
+    stars_tbl['y'] = y[mask]  
+
+    #Calculate mean, median, std
+    mean_val, median_val, std_val = sigma_clipped_stats(data, sigma=sigma)  
+    data = data - median_val  
+
+    #Find pinholes and create ePSF
+    nddata = NDData(data=data)  
+
+    stars = extract_stars(nddata, stars_tbl, size=size) 
+
+    epsf_builder = EPSFBuilder(oversampling=oversampling, maxiters=maxiters,
+                               progress_bar=False)  
+    epsf, fitted_stars = epsf_builder(stars)  
             
+    #Use ePSF to find precise locations of pinholes
+    daofind = DAOPhotPSFPhotometry(crit_separation=30, threshold=threshold, fwhm=fwhm, psf_model=epsf, 
+                                   fitshape=fitshape,aperture_radius=12,niters=1)
+
+    #Get positions
+    sources = daofind(data)
             
-            data = data_full
+    for col in sources.colnames:  
+        sources[col].info.format = '%.8g'
 
-            #Find peaks in data
-            peaks_tbl = find_peaks(data, threshold=threshold) 
-            peaks_tbl['peak_value'].info.format = '%.8g'
-
-            #Load data around found peaks
-            hsize = (size - 1) / 2
-            x = peaks_tbl['x_peak']  
-            y = peaks_tbl['y_peak']  
-            mask = ((x > hsize) & (x < (data.shape[1] -1 - hsize)) &
-                    (y > hsize) & (y < (data.shape[0] -1 - hsize)))  
-
-            stars_tbl = Table()
-            stars_tbl['x'] = x[mask]  
-            stars_tbl['y'] = y[mask]  
-
-            #Calculate mean, median, std
-            mean_val, median_val, std_val = sigma_clipped_stats(data, sigma=sigma)  
-            data = data - median_val  
-
-            #Find pinholes and create ePSF
-            nddata = NDData(data=data)  
-
-            stars = extract_stars(nddata, stars_tbl, size=size) 
-
-            epsf_builder = EPSFBuilder(oversampling=oversampling, maxiters=maxiters,
-                                   progress_bar=False)  
-            epsf, fitted_stars = epsf_builder(stars)  
-            
-            #Use ePSF to find precise locations of pinholes
-            daofind = DAOPhotPSFPhotometry(crit_separation=30, threshold=threshold, fwhm=fwhm, psf_model=epsf, 
-                                           fitshape=fitshape,aperture_radius=12,niters=1)
-
-            #Get positions
-            sources = daofind(data)
-            
-            for col in sources.colnames:  
-                sources[col].info.format = '%.8g'
-
-            pos = np.transpose((sources['x_fit'], sources['y_fit']))
-            pos_full = np.append(pos_full,pos,axis=0)
+    pos = np.transpose((sources['x_fit'], sources['y_fit']))
+    pos_full = np.append(pos_full,pos,axis=0)
     
     pos_full = pos_full[1:]
     
