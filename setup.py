@@ -4,14 +4,13 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='MASCADO',
+    name='New_MASCADO',
     version='1.0',
-    description='Inspection tool for Mask Astrometry data '
-                'from the MICADO project.',
-    author='Hannes Riechert',
-    author_email='hannes@tychons.net',
+    description='Expansion for MICADO.',
+    author='Jonas Sauter',
+    author_email='jonas.sauter@web.de',
     python_requires='>=3.5',
-    url='https://github.com/tychon/mascado',
+    url='https://github.com/Manaffel/New_MASCADO',
     license='GPLv3',
 
     packages=find_packages(exclude=['tests.*', 'tests']),
@@ -20,8 +19,6 @@ setup(
         'matplotlib',
         'scipy',
         'pandas'],
-    scripts=[
-        'scripts/mascado_analyze',
-        'scripts/mascado_compare'],
+    scripts=[],
     test_suite='tests',
 )
