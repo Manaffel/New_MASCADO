@@ -2,9 +2,9 @@ test:
 	python -m unittest discover --start-directory tests
 
 docupdate:
-	rm -rf docs/source/new_mascado.*
+	rm -rf docs/source/New_MASCADO.*
 	cd docs; \
-	sphinx-apidoc -MeT -o source/ ../new_mascado
+	sphinx-apidoc -MeT -o source/ ../New_MASCADO
 
 docbuild:
 	cd docs; \
