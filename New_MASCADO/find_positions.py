@@ -321,7 +321,7 @@ def find_pinholes_regular(fname,sname,fdarkff,fdark,fff,files,ref_shape,size,thr
     return positions_sort, ref_positions
    
 def find_pinholes_random(fname,freference,sname,fdarkff,fdark,fff,files,size,threshold,fwhm,fitshape,MAX_CONTROL_POINTS,
-                  PIXEL_TOL,sigma=2.,oversampling=4,maxiters=3,MIN_MATCHES_FRACTION=0.8):
+                  PIXEL_TOL,sigma=2.,oversampling=4,maxiters=3,MIN_MATCHES_FRACTION=0.8,NUM_NEAREST_NEIGHBORS=5):
     """Finds and fits randomly spread pinhole positions with a ePSF in a FITS image. Then matches them to the reference positions.
     
     Parameters
