@@ -157,7 +157,7 @@ def sort_positions_regular(positions,posbase,ref_shape):
                 
     return positions, ref_positions
 
-def find_pinholes_regular(fname,sname,fdarkff,fdark,fff,files,ref_shape,size,threshold,fwhm,fitshape,sigma=2.,oversampling=4,maxiters=3):
+def find_pinholes_regular(fname,sname,fdarkff,fdark,fff,files,ref_shape,size,threshold,fwhm,fitshape,range_psf,sigma=2.,oversampling=4,maxiters=3):
     """Finds and fits regullary spread pinhole positions with a ePSF in a FITS image.
     
     Parameters
@@ -175,7 +175,7 @@ def find_pinholes_regular(fname,sname,fdarkff,fdark,fff,files,ref_shape,size,thr
     files : (1, 2)-shaped int array
         File range to create a median image
     ref_shape : (1,2)-shaped array
-        Number of reference stars in x and y direction (x x y).
+        Number of reference stars in x and y direction [x, y].
     size : int
         Rectangular size of the ePSF. Size must be an odd number.
     threshold : float
@@ -186,6 +186,8 @@ def find_pinholes_regular(fname,sname,fdarkff,fdark,fff,files,ref_shape,size,thr
         Rectangular shape around the center of a star which will be used to collect the data to do the fitting. 
         Can be an integer to be the same along both axes. E.g., 5 is the same as (5, 5), which means to fit only at the following 
         relative pixel positions: [-2, -1, 0, 1, 2]. Each element of fitshape must be an odd number.
+    range_psf : (1, 4)-shaped int array
+        Position range to compute epsf [xmin,xmax,ymin,ymax]
     sigma : float
         Number of standard deviations used to perform sigma clip with a astropy.stats.SigmaClip object.
     oversampling : int or tuple of two int
@@ -216,7 +218,7 @@ def find_pinholes_regular(fname,sname,fdarkff,fdark,fff,files,ref_shape,size,thr
     data_full = np.median(data_col,axis=0)
     pos_full = np.array([[0,0]]) 
     
-    data = data_full
+    data = data_full[range_psf[2]:range_psf[3],range_psf[0]:range_psf[1]]
 
     #Find peaks in data
     peaks_tbl = find_peaks(data, threshold=threshold) 
@@ -251,7 +253,7 @@ def find_pinholes_regular(fname,sname,fdarkff,fdark,fff,files,ref_shape,size,thr
                                    fitshape=fitshape,aperture_radius=12,niters=1)
 
     #Get positions
-    sources = daofind(data)
+    sources = daofind(data_full)
             
     for col in sources.colnames:  
         sources[col].info.format = '%.8g'
@@ -317,7 +319,7 @@ def find_pinholes_regular(fname,sname,fdarkff,fdark,fff,files,ref_shape,size,thr
     return positions_sort, ref_positions
    
 def find_pinholes_irregular(fname,freference,sname,fdarkff,fdark,fff,files,size,threshold,fwhm,fitshape,MAX_CONTROL_POINTS,
-                  PIXEL_TOL,sigma=2.,oversampling=4,maxiters=3,MIN_MATCHES_FRACTION=0.8,NUM_NEAREST_NEIGHBORS=5):
+                  PIXEL_TOL,range_psf,sigma=2.,oversampling=4,maxiters=3,MIN_MATCHES_FRACTION=0.8,NUM_NEAREST_NEIGHBORS=5):
     """Finds and fits irregularly spread pinhole positions with a ePSF in a FITS image. Then matches them to the reference positions.
     
     Parameters
@@ -351,6 +353,8 @@ def find_pinholes_irregular(fname,freference,sname,fdarkff,fdark,fff,files,size,
         The maximum control points (stars) to use to build the invariants.    
     PIXEL_TOL : int
         The pixel distance tolerance to assume two invariant points are the same.
+    range_psf : (1, 4)-shaped int array
+        Position range to compute epsf [xmin,xmax,ymin,ymax]
     sigma : float
         Number of standard deviations used to perform sigma clip with a astropy.stats.SigmaClip object.
     oversampling : int or tuple of two int
@@ -386,7 +390,7 @@ def find_pinholes_irregular(fname,freference,sname,fdarkff,fdark,fff,files,size,
     data_full = np.median(data_col,axis=0)
     pos_full = np.array([[0,0]])
             
-    data = data_full
+    data = data_full[range_psf[2]:range_psf[3],range_psf[0]:range_psf[1]]
 
     #Find peaks in data
     peaks_tbl = find_peaks(data, threshold=threshold) 
@@ -421,7 +425,7 @@ def find_pinholes_irregular(fname,freference,sname,fdarkff,fdark,fff,files,size,
                                    fitshape=fitshape,aperture_radius=12,niters=1)
                                    
     #Get positions
-    sources = daofind(data)
+    sources = daofind(data_full)
             
     for col in sources.colnames:  
         sources[col].info.format = '%.8g'
