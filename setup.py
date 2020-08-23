@@ -19,6 +19,7 @@ setup(
         'matplotlib',
         'scipy',
         'pandas'],
-    scripts=[],
+    scripts=['scripts/mascado_analyze',
+        'scripts/mascado_compare'],
     test_suite='tests',
 )
