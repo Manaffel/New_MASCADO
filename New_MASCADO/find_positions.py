@@ -216,7 +216,6 @@ def find_pinholes_regular(fname,sname,fdarkff,fdark,fff,files,ref_shape,size,thr
     
     #Claculate median image
     data_full = np.median(data_col,axis=0)
-    pos_full = np.array([[0,0]]) 
     
     data = data_full[range_psf[2]:range_psf[3],range_psf[0]:range_psf[1]]
 
@@ -258,10 +257,7 @@ def find_pinholes_regular(fname,sname,fdarkff,fdark,fff,files,ref_shape,size,thr
     for col in sources.colnames:  
         sources[col].info.format = '%.8g'
 
-    pos = np.transpose((sources['x_fit'], sources['y_fit']))
-    pos_full = np.append(pos_full,pos,axis=0)
-    
-    pos_full = pos_full[1:]
+    pos_full = np.transpose((sources['x_fit'], sources['y_fit']))
     
     #Plot found pinholes
     apertures = CircularAperture(pos_full, r=10)
@@ -277,7 +273,7 @@ def find_pinholes_regular(fname,sname,fdarkff,fdark,fff,files,ref_shape,size,thr
                    ,loc='lower left',prop={'size': 12})
     plt.show()
     
-    #Find central position
+        #Find central position
     xcent = (np.max(pos_full[:,0])+np.min(pos_full[:,0]))/2
     ycent = (np.max(pos_full[:,1])+np.min(pos_full[:,1]))/2
     
